@@ -197,3 +197,16 @@ def test_cli_forecast_mobile(mock_render, mock_fetch, mock_get_loc):
     assert mock_render.call_args[1].get("mobile") is True
 
 
+@patch("jpweather.cli.get_location_or_prompt")
+def test_cli_current_cancel(mock_get_loc):
+    runner = CliRunner()
+    
+    # Mock geocode returning cancellation sentinel dict
+    mock_get_loc.return_value = {"cancelled": True}
+    
+    result = runner.invoke(cli, ["current", "東京"])
+    assert result.exit_code == 0
+    assert "已取消查詢。" in result.output
+
+
+

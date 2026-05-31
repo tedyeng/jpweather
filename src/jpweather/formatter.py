@@ -129,6 +129,8 @@ def select_location_interactive(locations: List[Dict[str, Any]]) -> Dict[str, An
         ])
     ).ask()
     
+    if not isinstance(selected, dict):
+        return {"cancelled": True}
     return selected
 
 def render_current_weather(loc: Dict[str, Any], weather_data: Dict[str, Any], mobile: bool = False):

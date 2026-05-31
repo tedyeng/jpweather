@@ -117,6 +117,9 @@ def interactive_wizard(mobile: bool = False):
     if not loc:
         console.print(f"[red]❌ 找不到與「{query}」相關的日本地點，請換個詞試試！[/red]")
         return
+    if isinstance(loc, dict) and loc.get("cancelled"):
+        console.print("[dim]已取消查詢。[/dim]")
+        return
         
     weather = fetch_weather_with_cache(loc)
     if not weather:
@@ -173,6 +176,9 @@ def current(ctx, location, no_interactive, mobile):
     if not loc:
         console.print(f"[red]❌ 找不到與「{location}」相關的日本地點。[/red]")
         return
+    if isinstance(loc, dict) and loc.get("cancelled"):
+        console.print("[dim]已取消查詢。[/dim]")
+        return
         
     weather = fetch_weather_with_cache(loc)
     if not weather:
@@ -205,6 +211,9 @@ def forecast(ctx, location, no_interactive, mobile):
     loc = get_location_or_prompt(location, interactive=not no_interactive)
     if not loc:
         console.print(f"[red]❌ 找不到與「{location}」相關的日本地點。[/red]")
+        return
+    if isinstance(loc, dict) and loc.get("cancelled"):
+        console.print("[dim]已取消查詢。[/dim]")
         return
         
     weather = fetch_weather_with_cache(loc)

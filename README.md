@@ -107,6 +107,22 @@ uv run jpweather clean
 uv run pytest
 ```
 
+## 📊 數據來源 (Data Sources)
+
+本專案之天氣數據與地理定位資訊完全對接公開且免金鑰的高解析度數據源，並透過本地 SQLite 持久化快取進行查詢加速：
+
+### 1. 天氣預報數據 (Weather Forecast)
+對接 **[Open-Meteo Weather API](https://open-meteo.com/)**，優先深度整合以下數值天氣預報模型：
+* **🇯🇵 日本與東亞地區**：優先調用 **日本氣象廳 (JMA, Japan Meteorological Agency)** 的 **MSM (5公里高解析度區域模型)** 與 **GSM (全球光譜模型)**，提供最具權威性與在地精準度的天氣與降雨指標。
+* **🌍 全球無縫覆蓋**：對於日本以外的國際城市，自動切換調用 **歐洲中期天氣預報中心 (ECMWF)** 的 IFS 模型（9公里網格）與 **美國國家海洋暨大氣總署 (NOAA)** 的 **GFS** 預報模型。
+
+### 2. 地理資訊與地名檢索 (Geocoding & Reverse Geocoding)
+地名查詢與經緯度定位採用雙引擎無縫 fallback 架構：
+* **主引擎：[Open-Meteo Geocoding Service](https://open-meteo.com/en/docs/geocoding-api)**（基於 GeoNames 數據庫），自動過濾並優先匹配日本（`JP`）境內的地點，支援日、中、英多語系。
+* **副引擎與 GPS 反查：[OpenStreetMap (OSM) Nominatim Service](https://nominatim.org/)**，用於：
+  * 自然地標、景區、名勝山谷（如 `富士山`、`上高地` 等）的備用高精度地理定位。
+  * **GPS 座標逆向定標**：精確將 Decimal 十進位或 DMS 度分秒座標（如 `北緯25°5′0″ 東經121°34′43″`）反查為實際地標、行政區或路名名稱。
+
 ---
 
 ## 📂 專案目錄結構

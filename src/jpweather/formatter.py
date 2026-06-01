@@ -81,6 +81,40 @@ def get_weekday_ch(date_str: str) -> str:
     except Exception:
         return ""
 
+def to_traditional_chinese(text: str) -> str:
+    """Convert common geocoding Simplified Chinese/Japanese Kanji characters to Traditional Chinese."""
+    if not isinstance(text, str):
+        return text
+    
+    mapping = {
+        "台湾": "台灣",
+        "湾": "灣",
+        "县": "縣",
+        "区": "區",
+        "东": "東",
+        "国": "國",
+        "气": "氣",
+        "温": "溫",
+        "风": "風",
+        "云": "雲",
+        "阴": "陰",
+        "雾": "霧",
+        "广": "廣",
+        "岛": "島",
+        "爱": "愛",
+        "静": "靜",
+        "冈": "岡",
+        "福": "福",
+        "丰": "豐",
+        "阪": "阪",
+        "叶": "葉",
+        "号": "號",
+    }
+    
+    for s, t in mapping.items():
+        text = text.replace(s, t)
+    return text
+
 def format_location_title(loc: Dict[str, Any]) -> str:
     """Generate a clean, beautiful display name for a location."""
     name = loc.get("name")
@@ -95,7 +129,8 @@ def format_location_title(loc: Dict[str, Any]) -> str:
     if country:
         parts.append(country)
         
-    return ", ".join(parts)
+    raw_title = ", ".join(parts)
+    return to_traditional_chinese(raw_title)
 
 def select_location_interactive(locations: List[Dict[str, Any]]) -> Dict[str, Any]:
     """
@@ -168,7 +203,8 @@ def render_current_weather(loc: Dict[str, Any], weather_data: Dict[str, Any], mo
         full_text.append(strip_vs16(f"降雨 Rain     : {precip} mm\n"), style="white")
         
         # Print a beautiful bold title directly as text, and output the clean borderless content
-        mobile_console.print(strip_vs16(f"\n[bold yellow]🌦️ {loc.get('name', 'GPS')} 目前天氣 Current Weather[/bold yellow]\n"))
+        mobile_title = to_traditional_chinese(f"🌦️ {loc.get('name', 'GPS')} 目前天氣 Current Weather")
+        mobile_console.print(strip_vs16(f"\n[bold yellow]{mobile_title}[/bold yellow]\n"))
         mobile_console.print(full_text)
         
         # Hourly forecast (narrow table)

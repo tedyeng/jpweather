@@ -25,7 +25,7 @@ We have successfully designed and built a gorgeous, high-performance CLI tool fo
 
 5. **Direct GPS Coordinate (Decimal & DMS) Parsing & OSM Reverse Geocoding**:
    - Direct decimal GPS coordinates (e.g., `35.6895, 139.6917`) or **DMS degree-minute-second formats** (e.g., `北緯25°5′0″  東經121°34′43″` or `N 35° 41' 22" E 139° 41' 30"`) are parsed, mathematically converted to decimal values, validated, and reverse-geocoded using the **OpenStreetMap Nominatim Reverse API**.
-   - Gracefully resolves real place/road names (like `港墘路, 台北市, 台湾` or `都庁通り, 東京都, 日本`) to display on the weather card, bypasses geocoding, and falls back to placeholder coordinates names if offline.
+   - Gracefully resolves real place/road names (like `港墘路, 台北市, 台灣` or `都庁通り, 東京都, 日本`) to display on the weather card, bypasses geocoding, and falls back to placeholder coordinates names if offline.
 
 ---
 

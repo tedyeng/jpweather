@@ -192,12 +192,6 @@ def render_current_weather(loc: Dict[str, Any], weather_data: Dict[str, Any], mo
                 
             mobile_console.print("\n[bold yellow]🕒 3小時預報 Hourly Forecast[/bold yellow]")
             
-            hourly_table = Table(box=None, header_style="bold cyan", padding=(0, 1), width=38)
-            hourly_table.add_column("時間")
-            hourly_table.add_column("天氣")
-            hourly_table.add_column("氣溫", justify="right")
-            hourly_table.add_column("降雨", justify="right")
-            
             for step in range(8):
                 idx = start_idx + (step * 3)
                 if idx >= len(times):
@@ -224,14 +218,14 @@ def render_current_weather(loc: Dict[str, Any], weather_data: Dict[str, Any], mo
                 temp_display = f"{temp_val:.1f}°C"
                 pop_display = f"{pop_val}%" if pop_val is not None else "-"
                 
-                hourly_table.add_row(
-                    strip_vs16(time_display),
-                    strip_vs16(weather_display),
-                    strip_vs16(temp_display),
-                    strip_vs16(pop_display)
-                )
+                # Format as a clean, compact single line
+                line = Text()
+                line.append(f"● {time_display} ", style="cyan")
+                line.append(f"{weather_display} ", style=color_val)
+                line.append(f"{temp_display} ", style="white")
+                line.append(f"{pop_display}", style="grey70")
                 
-            mobile_console.print(hourly_table)
+                mobile_console.print(strip_vs16(line))
         return
 
     current = weather_data.get("current", {})

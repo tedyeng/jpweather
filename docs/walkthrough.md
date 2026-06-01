@@ -126,11 +126,10 @@ By passing the `--mobile` option parameter to any subcommand or parent command, 
   ╰────────────────────────────────────╯
 
   🕒 3小時預報 Hourly Forecast
-   時間     天氣             氣溫  降雨 
-   15:00*   ☀ 晴天         28.0°C    0% 
-   18:00    ☀ 晴天         25.7°C    0% 
-   21:00    🌤 晴間         23.4°C    0% 
-   00:00    ☀ 晴天         22.8°C    0% 
+  ● 18:00* 🌤 晴間 24.0°C 0%
+  ● 21:00 ☁ 陰天 21.5°C 0%
+  ● 00:00 ☁ 陰天 20.4°C 0%
+  ● 03:00 ☁ 陰天 19.8°C 0%
   ```
 
 - **Mobile 7-Day Forecast**:

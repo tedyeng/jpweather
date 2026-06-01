@@ -167,14 +167,9 @@ def render_current_weather(loc: Dict[str, Any], weather_data: Dict[str, Any], mo
         full_text.append(strip_vs16(f"風速 Wind Spd : {wind_spd} m/s {wind_arrow}\n"), style="white")
         full_text.append(strip_vs16(f"降雨 Rain     : {precip} mm\n"), style="white")
         
-        panel = Panel(
-            full_text,
-            title=strip_vs16(f"🌦️ {loc.get('name', 'GPS')} 目前天氣"),
-            border_style="bright_blue",
-            box=ROUNDED,
-            width=38
-        )
-        mobile_console.print(panel)
+        # Print a beautiful bold title directly as text, and output the clean borderless content
+        mobile_console.print(strip_vs16(f"\n[bold yellow]🌦️ {loc.get('name', 'GPS')} 目前天氣 Current Weather[/bold yellow]\n"))
+        mobile_console.print(full_text)
         
         # Hourly forecast (narrow table)
         hourly = weather_data.get("hourly", {})

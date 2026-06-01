@@ -109,21 +109,22 @@ By passing the `--mobile` option parameter to any subcommand or parent command, 
   ```bash
   uv run jpweather --mobile current "東京"
   ```
-  *Output Panel Example:*
+  *Output Example:*
   ```text
-  ╭──────── 🌦 東京都 目前天氣 ─────────╮
-  │ 📍 東京都, 日本                    │
-  │ 🌐 緯度: 35.69 經度: 139.69        │
-  │ ⏰ 時區: Asia/Tokyo                │
-  │                                    │
-  │ 🌤️  26.7°C  晴間                   │
-  │                                    │
-  │ 體感 Apparent : 28.7°C             │
-  │ 濕度 Humidity : 60%                │
-  │ 風速 Wind Spd : 6.9 m/s ↖          │
-  │ 降雨 Rain     : 0.0 mm             │
-  │                                    │
-  ╰────────────────────────────────────╯
+  🌦 東京都 目前天氣 Current Weather
+
+  📍 東京都, 日本
+  🌐 緯度: 35.69 經度: 139.69
+  ⏰ 時區: Asia/Tokyo
+
+  🌤  22.8°C  晴間
+
+  體感 Apparent : 24.1°C
+  濕度 Humidity : 70%
+  風速 Wind Spd : 7.6 m/s ↑
+  降雨 Rain     : 0.0 mm
+
+
 
   🕒 3小時預報 Hourly Forecast
   ● 18:00* 🌤 晴間 24.0°C 0%

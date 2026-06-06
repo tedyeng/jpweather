@@ -1,5 +1,6 @@
 import click
 import questionary
+from typing import Dict, Any, Optional
 from rich.console import Console
 from jpweather import api
 from jpweather.cache import SQLiteCache
@@ -7,13 +8,14 @@ from jpweather.formatter import (
     select_location_interactive,
     render_current_weather,
     render_forecast_weather,
-    format_location_title
+    format_location_title,
+    render_golden_hour
 )
 
 console = Console()
 cache = SQLiteCache(expiration_seconds=900) # Weather cache defaults to 15 mins
 
-def get_location_or_prompt(query: str, interactive: bool = True) -> dict:
+def get_location_or_prompt(query: str, interactive: bool = True) -> Optional[Dict[str, Any]]:
     """
     Resolve location from query (using cache first, then API).
     If multiple locations are found and interactive is True, prompts user to select.
@@ -45,7 +47,7 @@ def get_location_or_prompt(query: str, interactive: bool = True) -> dict:
         # Non-interactive: pick the top match
         return locations[0]
 
-def fetch_weather_with_cache(loc: dict) -> dict | None:
+def fetch_weather_with_cache(loc: dict) -> Optional[Dict[str, Any]]:
     """Fetch weather data for a location using cache first, then the API.
 
     Returns ``None`` if the API request fails.
@@ -59,7 +61,7 @@ def fetch_weather_with_cache(loc: dict) -> dict | None:
     if cached_weather:
         return cached_weather
 
-    with console.status("[bold green]🌤️ 正在取得日本氣象預報...[/bold green]"):
+    with console.status("[bold green]🌤️ 正在取得氣象預報...[/bold green]"):
         weather = api.get_weather(lat, lon, timezone)
 
     # ``weather`` may be ``None`` if the request failed.
@@ -88,6 +90,8 @@ def cli(ctx, mobile):
       $ uv run jpweather current "東京"                                  # 查詢東京即時天氣
       $ uv run jpweather current "東京" --mobile                         # 手機版查詢即時天氣
       $ uv run jpweather forecast "Kyoto"                                # 查詢京都一週預報
+      $ uv run jpweather golden "東京"                                   # 查詢黃金/藍調拍攝時刻
+      $ uv run jpweather golden "京都" --week                            # 查詢一週光影預報
       $ uv run jpweather current "東京" --no-interactive                 # 靜態模式 (跳過地點選擇)
       $ uv run jpweather current "100-0001"                              # 查詢日本郵遞區號
       $ uv run jpweather current "35.68,139.6"                           # 查詢 GPS 十進位座標
@@ -133,6 +137,7 @@ def interactive_wizard(mobile: bool = False):
             "1. ☀️ 即時天氣狀態 (Current Weather)",
             "2. 📅 7 天天氣預報 (7-Day Forecast)",
             "3. 🌟 兩者皆顯示 (Both)",
+            "4. 📸 黃金/藍調拍照時刻 (Golden/Blue Hour)",
             "❌ 退出 (Exit)"
         ],
         style=questionary.Style([
@@ -148,6 +153,23 @@ def interactive_wizard(mobile: bool = False):
     elif qtype and "3." in qtype:
         render_current_weather(loc, weather, mobile=mobile)
         render_forecast_weather(loc, weather, mobile=mobile)
+    elif qtype and "4." in qtype:
+        period = questionary.select(
+            "📅 請選擇查詢範圍：",
+            choices=[
+                "1. 今日光影時刻 (Today Only)",
+                "2. 未來一週光影預報 (7-Day Outlook)"
+            ],
+            style=questionary.Style([
+                ('pointer', 'fg:#00D7FF bold'),
+                ('highlighted', 'fg:#00D7FF bold'),
+            ])
+        ).ask()
+        
+        if period and "1." in period:
+            render_golden_hour(loc, weather, week=False, mobile=mobile)
+        elif period and "2." in period:
+            render_golden_hour(loc, weather, week=True, mobile=mobile)
     else:
         console.print("[dim]已退出。[/dim]")
 
@@ -230,6 +252,42 @@ def clean():
     """
     cache.clear()
     console.print("[bold green]✨ 本地天氣與地名快取資料已成功清除！[/bold green]")
+
+@cli.command()
+@click.argument("location", required=True)
+@click.option("--week", is_flag=True, help="顯示未來一週 (7天) 的黃金與藍調時刻預報。")
+@click.option("--no-interactive", is_flag=True, help="非互動模式：自動選取第一個匹配的地點。")
+@click.option("--mobile", is_flag=True, help="手機閱讀模式：最佳化排版以適合手機 (如 iPhone 16 Pro) 38格寬度終端機。")
+@click.pass_context
+def golden(ctx, location, week, no_interactive, mobile):
+    """
+    📸 查詢黃金時刻（Golden Hour）與藍調時刻（Blue Hour）起訖時間與攝影推薦指數。
+    
+    [LOCATION] 可接受地名、地標景區、日本郵遞區號、GPS十進位座標或 DMS 度分秒座標。
+    
+    \b
+    使用範例 (Examples):
+      $ uv run jpweather golden "東京"
+      $ uv run jpweather golden "京都" --week
+      $ uv run jpweather golden "富士山" --mobile
+      $ uv run jpweather golden "35.68,139.69" --no-interactive
+    """
+    is_mobile = mobile or (ctx.parent.params.get("mobile") if ctx.parent else False)
+    
+    loc = get_location_or_prompt(location, interactive=not no_interactive)
+    if not loc:
+        console.print(f"[red]❌ 找不到與「{location}」相關的日本地點。[/red]")
+        return
+    if isinstance(loc, dict) and loc.get("cancelled"):
+        console.print("[dim]已取消查詢。[/dim]")
+        return
+        
+    weather = fetch_weather_with_cache(loc)
+    if not weather:
+        console.print("[red]❌ 無法取得天氣資料。[/red]")
+        return
+        
+    render_golden_hour(loc, weather, week=week, mobile=is_mobile)
 
 if __name__ == "__main__":
     cli()

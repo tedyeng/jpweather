@@ -1,10 +1,40 @@
 import requests
 import re
-from typing import List, Dict, Any
+import logging
+from typing import List, Dict, Any, Optional, Tuple
+from datetime import datetime, timezone, timedelta
+
+# Setup logging
+logger = logging.getLogger("jpweather.api")
 
 # Open-Meteo API base URLs
 GEO_URL = "https://geocoding-api.open-meteo.com/v1/search"
 WEATHER_URL = "https://api.open-meteo.com/v1/forecast"
+
+# Photography rating thresholds
+PRECIP_THRESHOLD_HIGH = 50.0      # Precipitation probability > 50% means high chance of rain
+PRECIP_THRESHOLD_MODERATE = 30.0  # Precipitation probability > 30% means moderate chance of rain
+CLOUD_COVER_OVERCAST = 90.0       # Cloud cover > 90% is overcast
+CLOUD_COVER_MOSTLY_CLOUDY = 75.0  # Cloud cover > 75% is mostly cloudy
+CLOUD_COVER_PARTLY_CLOUDY_MIN = 30.0
+CLOUD_COVER_PARTLY_CLOUDY_MAX = 70.0
+CLOUD_COVER_CLEAR = 10.0          # Cloud cover < 10% is completely clear
+
+def is_in_japan_bounds(lat: float, lon: float) -> bool:
+    """Heuristic check if coordinates are within or close to Japan's boundaries."""
+    return 20.0 <= lat <= 46.0 and 122.0 <= lon <= 154.0
+
+def parse_iso_datetime(t_str: str, default_tz: timezone) -> datetime:
+    """Parse ISO datetime string, handling 'Z' suffix, and ensure it has timezone info.
+    
+    If naive, attaches default_tz. If aware, converts to default_tz.
+    """
+    if t_str.endswith("Z"):
+        t_str = t_str[:-1] + "+00:00"
+    dt = datetime.fromisoformat(t_str)
+    if dt.tzinfo is None:
+        return dt.replace(tzinfo=default_tz)
+    return dt.astimezone(default_tz)
 
 def is_cjk(char: str) -> bool:
     """Check if a character is CJK (Chinese/Japanese/Korean)."""
@@ -38,8 +68,8 @@ def fetch_geocode(name: str) -> List[Dict[str, Any]]:
         r = requests.get(GEO_URL, params=params, timeout=10)
         if r.status_code == 200:
             return r.json().get("results", [])
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("Geocode request failed for name %s: %s", name, exc, exc_info=True)
     return []
 
 def fetch_nominatim_fallback(query: str) -> List[Dict[str, Any]]:
@@ -92,11 +122,11 @@ def fetch_nominatim_fallback(query: str) -> List[Dict[str, Any]]:
                     "timezone": "Asia/Tokyo"
                 })
             return formatted_results
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("Nominatim fallback geocode request failed for query %s: %s", query, exc, exc_info=True)
     return []
 
-def parse_gps(query: str) -> tuple[float, float] | None:
+def parse_gps(query: str) -> Optional[Tuple[float, float]]:
     """Parse GPS coordinates from a query string.
     
     Supports:
@@ -237,10 +267,10 @@ def reverse_geocode(lat: float, lon: float) -> dict:
                 "country_code": country_code,
                 "country": country,
                 "admin1": admin1,
-                "timezone": "auto"
+                "timezone": "Asia/Tokyo" if is_in_japan_bounds(lat, lon) else "UTC"
             }
-    except Exception:
-        pass
+    except Exception as exc:
+        logger.debug("Reverse geocode failed for coords (%s, %s): %s", lat, lon, exc, exc_info=True)
     
     # Fallback if reverse geocode fails
     return {
@@ -251,8 +281,18 @@ def reverse_geocode(lat: float, lon: float) -> dict:
         "country_code": "JP",
         "country": "日本",
         "admin1": "GPS 定位",
-        "timezone": "auto"
+        "timezone": "Asia/Tokyo" if is_in_japan_bounds(lat, lon) else "UTC"
     }
+def _location_sort_key(item: Dict[str, Any], base_query: str) -> Tuple[int, int]:
+    """Helper to compute sort priority for geocoding results."""
+    name = (item.get("name") or "").lower()
+    admin1 = (item.get("admin1") or "").lower()
+    q_lower = base_query.lower()
+    
+    # Priority boost if exact match of the search query
+    is_exact = 1 if (name == q_lower or q_lower in name or q_lower in admin1) else 0
+    pop = item.get("population", 0) or 0
+    return (is_exact, pop)
 
 def geocode(query: str) -> List[Dict[str, Any]]:
     """
@@ -311,23 +351,10 @@ def geocode(query: str) -> List[Dict[str, Any]]:
     if not results_to_use:
         results_to_use = fetch_nominatim_fallback(query)
 
-    # Sort results:
-    # 1. Exact match in name or admin1 (prefecture) or Japanese representation
-    # 2. Higher population first
-    def sort_key(item):
-        name = (item.get("name") or "").lower()
-        admin1 = (item.get("admin1") or "").lower()
-        q_lower = base_query.lower()
-        
-        # Priority boost if exact match of the search query
-        is_exact = 1 if (name == q_lower or q_lower in name or q_lower in admin1) else 0
-        pop = item.get("population", 0) or 0
-        return (is_exact, pop)
-
-    results_to_use.sort(key=sort_key, reverse=True)
+    results_to_use.sort(key=lambda x: _location_sort_key(x, base_query), reverse=True)
     return results_to_use
 
-def get_weather(lat: float, lon: float, timezone: str) -> dict | None:
+def get_weather(lat: float, lon: float, timezone: str) -> Optional[Dict[str, Any]]:
     """Fetch current weather and 7‑day forecast data for the given coordinates.
 
     Returns the JSON payload on success or ``None`` if the request fails
@@ -342,7 +369,7 @@ def get_weather(lat: float, lon: float, timezone: str) -> dict | None:
             "precipitation,weather_code,wind_speed_10m,wind_direction_10m"
         ),
         "hourly": (
-            "temperature_2m,precipitation_probability,weather_code"
+            "temperature_2m,precipitation_probability,weather_code,cloud_cover"
         ),
         "daily": (
             "weather_code,temperature_2m_max,temperature_2m_min,"
@@ -356,5 +383,76 @@ def get_weather(lat: float, lon: float, timezone: str) -> dict | None:
         r.raise_for_status()
         return r.json()
     except Exception as exc:  # Broad catch – any request failure returns None
-        # In a real CLI we would log this; here we simply return None
+        logger.error("Failed to fetch weather data from %s: %s", WEATHER_URL, exc, exc_info=True)
         return None
+
+def calculate_photography_rating(
+    start_time: Optional[datetime],
+    end_time: Optional[datetime],
+    hourly_data: dict,
+    timezone_str: str
+) -> Tuple[int, str]:
+    """
+    Calculate the photography rating (1 to 5 stars) and a text recommendation
+    for a given time window, based on hourly forecast data from Open-Meteo.
+    """
+    if not start_time or not end_time or not hourly_data:
+        return 3, "資料不足，無法評估拍攝條件。"
+
+    from zoneinfo import ZoneInfo
+    try:
+        local_tz = ZoneInfo(timezone_str)
+    except Exception as exc:
+        logger.warning("Invalid timezone %s, falling back to UTC: %s", timezone_str, exc)
+        local_tz = timezone.utc
+
+    start_local = start_time.astimezone(local_tz)
+    end_local = end_time.astimezone(local_tz)
+
+    matched_clouds = []
+    matched_precip = []
+    matched_codes = []
+
+    for i, t_str in enumerate(hourly_data.get("time", [])):
+        try:
+            t_dt = parse_iso_datetime(t_str, local_tz)
+        except Exception as exc:
+            logger.debug("Failed to parse hourly forecast time string %s: %s", t_str, exc)
+            continue
+        
+        # Consider the hourly forecast relevant if it falls within the window hour boundaries
+        window_start_hour = start_local.replace(minute=0, second=0, microsecond=0)
+        window_end_hour = end_local.replace(minute=0, second=0, microsecond=0) + timedelta(hours=1)
+        
+        if window_start_hour <= t_dt <= window_end_hour:
+            if i < len(hourly_data.get("cloud_cover", [])):
+                matched_clouds.append(hourly_data["cloud_cover"][i])
+            if i < len(hourly_data.get("precipitation_probability", [])):
+                matched_precip.append(hourly_data["precipitation_probability"][i])
+            if i < len(hourly_data.get("weather_code", [])):
+                matched_codes.append(hourly_data["weather_code"][i])
+
+    if not matched_clouds:
+        return 3, "無該時段預報，無法評估。"
+
+    avg_cloud = sum(matched_clouds) / len(matched_clouds)
+    avg_precip = sum(matched_precip) / len(matched_precip) if matched_precip else 0.0
+
+    # Rating criteria logic using extracted constants
+    is_raining = avg_precip > PRECIP_THRESHOLD_MODERATE or any(code >= 50 for code in matched_codes)
+    
+    if is_raining:
+        if avg_precip > PRECIP_THRESHOLD_HIGH or any(code >= 60 for code in matched_codes):
+            return 1, "🌧️ 降雨機率高，不建議戶外拍照。"
+        return 2, "🌦️ 可能有短暫降雨，拍照需注意防護。"
+
+    if avg_cloud > CLOUD_COVER_OVERCAST:
+        return 2, "☁️ 天空完全陰暗，光線將嚴重受阻。"
+    elif avg_cloud > CLOUD_COVER_MOSTLY_CLOUDY:
+        return 3, "🌥️ 多雲蔽日，光影效果一般。"
+    elif CLOUD_COVER_PARTLY_CLOUDY_MIN <= avg_cloud <= CLOUD_COVER_PARTLY_CLOUDY_MAX:
+        return 5, "⛅ 雲量適中！極易出現炫麗火燒雲與光影層次。"
+    elif avg_cloud < CLOUD_COVER_CLEAR:
+        return 4, "☀️ 天空晴朗無雲，光線柔和但背景較為單調。"
+    else:
+        return 4, "🌤️ 天氣晴朗，有少量雲彩點綴，適合拍攝。"

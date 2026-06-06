@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
 import questionary
 from rich.console import Console
 from rich.panel import Panel
@@ -514,3 +514,325 @@ def render_forecast_weather(loc: Dict[str, Any], weather_data: Dict[str, Any], m
         )
         
     console.print(table)
+
+def render_golden_hour(
+    loc: Dict[str, Any],
+    weather_data: Dict[str, Any],
+    week: bool = False,
+    mobile: bool = False
+):
+    """
+    Render the Golden & Blue Hour information for today or the upcoming week.
+    """
+    from jpweather.suncalc import get_sun_times
+    from jpweather.api import calculate_photography_rating
+    from datetime import timezone
+    from zoneinfo import ZoneInfo
+    
+    loc_title = format_location_title(loc)
+    lat = loc.get("latitude")
+    lon = loc.get("longitude")
+    timezone_str = weather_data.get("timezone", loc.get("timezone", "Asia/Tokyo"))
+    
+    try:
+        local_tz = ZoneInfo(timezone_str)
+    except Exception:
+        local_tz = timezone.utc
+
+    hourly_data = weather_data.get("hourly", {})
+    
+    def format_time(dt: Optional[datetime]) -> str:
+        if not dt:
+            return "--:--"
+        local_dt = dt.astimezone(local_tz)
+        return local_dt.strftime("%H:%M")
+        
+    def get_stars_str(stars: int) -> str:
+        return "★" * stars + "☆" * (5 - stars)
+
+    # In Python CJK environments, strip_vs16 is helper function already defined in formatter.py
+    # We will use it directly.
+
+    if week:
+        daily = weather_data.get("daily", {})
+        if not daily or "time" not in daily:
+            console.print("[red]❌ 無法取得一週的預報資料！[/red]")
+            return
+
+        dates = daily.get("time", [])
+        
+        if mobile:
+            mobile_console = Console(width=38)
+            mobile_console.print(f"\n[bold yellow]📸 一週光影預報 Weekly Golden Hour[/bold yellow]")
+            mobile_console.print(strip_vs16(f"📍 {loc_title}\n"))
+            
+            for date_str in dates:
+                try:
+                    dt_parsed = datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=local_tz)
+                except Exception:
+                    continue
+                
+                s_times = get_sun_times(lat, lon, dt_parsed)
+                polar = s_times.get("polar_status", "normal")
+                weekday = get_weekday_ch(date_str)
+                
+                card = Text()
+                if polar == "polar_day":
+                    card.append(f"● {date_str} ({weekday}) [極晝 ☀️]\n", style="bold yellow")
+                    card.append("  ☀️ 太陽終日不落，全天極晝\n", style="yellow")
+                    card.append("  💡 建議: 適合全天拍攝，但無傳統黃金/藍調時刻。\n")
+                elif polar == "polar_night":
+                    card.append(f"● {date_str} ({weekday}) [極夜 🌑]\n", style="bold blue")
+                    card.append("  🌑 太陽終日不出，全天極夜\n", style="bright_blue")
+                    card.append("  💡 建議: 全天處於黑夜，無傳統黃金/藍調時刻。\n")
+                else:
+                    stars, desc = calculate_photography_rating(
+                        s_times.get("golden_hour_pm_start"),
+                        s_times.get("golden_hour_pm_end"),
+                        hourly_data,
+                        timezone_str
+                    )
+                    stars_str = get_stars_str(stars)
+                    card.append(f"● {date_str} ({weekday}) {stars_str}\n", style="bold yellow")
+                    card.append(f"  🌅 晨光: {format_time(s_times.get('blue_hour_am_start'))} ~ {format_time(s_times.get('golden_hour_am_end'))}\n", style="cyan")
+                    card.append(f"  🌇 昏光: {format_time(s_times.get('golden_hour_pm_start'))} ~ {format_time(s_times.get('blue_hour_pm_end'))}\n", style="orange1")
+                    card.append(f"  💡 建議: {desc}\n")
+                
+                mobile_console.print(strip_vs16(card))
+            return
+
+        # Desktop Table Rendering
+        console.print(f"\n[bold yellow]📸 一週光影預報 Weekly Golden Hour[/bold yellow] : [cyan]{loc_title}[/cyan]")
+        console.print(f"緯度 Lat: {lat:.4f} | 經度 Lon: {lon:.4f} | 時區 TZ: {timezone_str}\n")
+        
+        table = Table(box=ROUNDED, border_style="bright_blue", header_style="bold cyan")
+        table.add_column("日期 Date", justify="left")
+        table.add_column("晨間藍調 Blue AM", justify="center", style="cyan")
+        table.add_column("晨間黃金 Golden AM", justify="center", style="yellow")
+        table.add_column("日出/日落 Sunrise/set", justify="center")
+        table.add_column("傍晚黃金 Golden PM", justify="center", style="orange1")
+        table.add_column("傍晚藍調 Blue PM", justify="center", style="bold blue")
+        table.add_column("攝影指數 Rating & Guide", justify="left")
+        
+        for date_str in dates:
+            try:
+                dt_parsed = datetime.strptime(date_str, "%Y-%m-%d").replace(tzinfo=local_tz)
+            except Exception:
+                continue
+            
+            s_times = get_sun_times(lat, lon, dt_parsed)
+            polar = s_times.get("polar_status", "normal")
+            weekday = get_weekday_ch(date_str)
+            date_display = f"{date_str} ({weekday})"
+            
+            if polar == "polar_day":
+                table.add_row(
+                    strip_vs16(date_display),
+                    strip_vs16("[yellow]極晝 Polar Day[/yellow]"),
+                    strip_vs16("[yellow]終日不落[/yellow]"),
+                    strip_vs16("☀️ Midnight Sun"),
+                    strip_vs16("[yellow]終日不落[/yellow]"),
+                    strip_vs16("[yellow]極晝 Polar Day[/yellow]"),
+                    strip_vs16("☀️ 24小時日光，無黃金/藍調時刻")
+                )
+            elif polar == "polar_night":
+                table.add_row(
+                    strip_vs16(date_display),
+                    strip_vs16("[blue]極夜 Polar Night[/blue]"),
+                    strip_vs16("[blue]終日不出[/blue]"),
+                    strip_vs16("🌑 Polar Night"),
+                    strip_vs16("[blue]終日不出[/blue]"),
+                    strip_vs16("[blue]極夜 Polar Night[/blue]"),
+                    strip_vs16("🌑 24小時黑暗，無黃金/藍調時刻")
+                )
+            else:
+                stars, desc = calculate_photography_rating(
+                    s_times.get("golden_hour_pm_start"),
+                    s_times.get("golden_hour_pm_end"),
+                    hourly_data,
+                    timezone_str
+                )
+                
+                blue_am = f"{format_time(s_times.get('blue_hour_am_start'))} - {format_time(s_times.get('blue_hour_am_end'))}"
+                gold_am = f"{format_time(s_times.get('golden_hour_am_start'))} - {format_time(s_times.get('golden_hour_am_end'))}"
+                sun_rise_set = f"🌅 {format_time(s_times.get('sunrise'))} / 🌇 {format_time(s_times.get('sunset'))}"
+                gold_pm = f"{format_time(s_times.get('golden_hour_pm_start'))} - {format_time(s_times.get('golden_hour_pm_end'))}"
+                blue_pm = f"{format_time(s_times.get('blue_hour_pm_start'))} - {format_time(s_times.get('blue_hour_pm_end'))}"
+                
+                color_tag = "bold green" if stars >= 4 else ("yellow" if stars >= 3 else "grey53")
+                rating_display = f"[{color_tag}]{get_stars_str(stars)}[/{color_tag}] {desc}"
+                
+                table.add_row(
+                    strip_vs16(date_display),
+                    strip_vs16(blue_am),
+                    strip_vs16(gold_am),
+                    strip_vs16(sun_rise_set),
+                    strip_vs16(gold_pm),
+                    strip_vs16(blue_pm),
+                    strip_vs16(rating_display)
+                )
+            
+        console.print(table)
+        return
+
+    # Single Day Rendering (Default today)
+    today = datetime.now(timezone.utc)
+    s_times = get_sun_times(lat, lon, today)
+    polar = s_times.get("polar_status", "normal")
+    
+    stars_am, desc_am = (3, "")
+    stars_pm, desc_pm = (3, "")
+    if polar == "normal":
+        stars_am, desc_am = calculate_photography_rating(
+            s_times.get("golden_hour_am_start"),
+            s_times.get("golden_hour_am_end"),
+            hourly_data,
+            timezone_str
+        )
+        
+        stars_pm, desc_pm = calculate_photography_rating(
+            s_times.get("golden_hour_pm_start"),
+            s_times.get("golden_hour_pm_end"),
+            hourly_data,
+            timezone_str
+        )
+
+    if mobile:
+        mobile_console = Console(width=38)
+        mobile_console.print(f"\n[bold yellow]📸 今日光影時刻 Golden Hour[/bold yellow]\n")
+        
+        full_text = Text()
+        full_text.append(strip_vs16(f"📍 {loc_title}\n"), style="bold cyan")
+        full_text.append(strip_vs16(f"🌐 緯度: {lat:.2f} 經度: {lon:.2f}\n"), style="dim")
+        full_text.append(strip_vs16(f"⏰ 時區: {timezone_str}\n\n"), style="dim")
+        
+        if polar == "polar_day":
+            full_text.append("☀️ 極晝狀態 Polar Day\n", style="bold yellow")
+            full_text.append("  此區域目前處於極晝 (太陽終日不落)。\n", style="yellow")
+            full_text.append("  全天均有日光，無傳統的日出/日落黃金與藍調光影。\n")
+        elif polar == "polar_night":
+            full_text.append("🌑 極夜狀態 Polar Night\n", style="bold blue")
+            full_text.append("  此區域目前處於極夜 (太陽終日不出)。\n", style="bright_blue")
+            full_text.append("  全天均為黑夜，無傳統的日出/日落黃金與藍調光影。\n")
+        else:
+            full_text.append("🌅 晨間晨光 Morning Light\n", style="bold cyan")
+            full_text.append(f"  藍調 Blue  : {format_time(s_times.get('blue_hour_am_start'))} ~ {format_time(s_times.get('blue_hour_am_end'))}\n")
+            full_text.append(f"  黃金 Gold  : {format_time(s_times.get('golden_hour_am_start'))} ~ {format_time(s_times.get('golden_hour_am_end'))}\n")
+            full_text.append(f"  日出 Rise  : {format_time(s_times.get('sunrise'))}\n")
+            full_text.append(f"  評估 Rate  : {get_stars_str(stars_am)}\n")
+            full_text.append(f"  指引 Info  : {desc_am.split('！')[-1]}\n\n")
+            
+            full_text.append("🌇 傍晚暮光 Evening Light\n", style="bold orange1")
+            full_text.append(f"  日落 Set   : {format_time(s_times.get('sunset'))}\n")
+            full_text.append(f"  黃金 Gold  : {format_time(s_times.get('golden_hour_pm_start'))} ~ {format_time(s_times.get('golden_hour_pm_end'))}\n")
+            full_text.append(f"  藍調 Blue  : {format_time(s_times.get('blue_hour_pm_start'))} ~ {format_time(s_times.get('blue_hour_pm_end'))}\n")
+            full_text.append(f"  評估 Rate  : {get_stars_str(stars_pm)}\n")
+            full_text.append(f"  指引 Info  : {desc_pm.split('！')[-1]}\n")
+        
+        mobile_console.print(strip_vs16(full_text))
+        return
+
+    # Desktop Card Rendering
+    console.print(f"\n📍 {loc_title}", style="bold cyan")
+    gps_info = f"🌐 緯度: {lat:.4f}  經度: {lon:.4f}  時區: {timezone_str}"
+    console.print(gps_info, style="dim")
+    
+    if polar == "polar_day":
+        polar_grid = Table.grid(padding=(0, 1))
+        polar_grid.add_column(style="yellow")
+        polar_grid.add_row("☀️ [bold]極晝狀態 (Polar Day) / Midnight Sun[/bold]")
+        polar_grid.add_row("此地太陽今日終日不落。")
+        polar_grid.add_row("整日均為白晝，可全天進行戶外拍攝，但無傳統日出/日落的黃金與藍調時刻。")
+        polar_panel = Panel(polar_grid, border_style="yellow", width=108, title="☀️ 極晝狀態 Polar Day")
+        
+        container = Panel(
+            polar_panel,
+            title=strip_vs16("[bold yellow]📸 黃金時刻與藍調時刻 Golden & Blue Hour[/bold yellow]"),
+            border_style="bright_blue",
+            box=ROUNDED,
+            width=112,
+            padding=(1, 2)
+        )
+        console.print(container)
+        return
+    elif polar == "polar_night":
+        polar_grid = Table.grid(padding=(0, 1))
+        polar_grid.add_column(style="bright_blue")
+        polar_grid.add_row("🌑 [bold]極夜狀態 (Polar Night) / Polar Night[/bold]")
+        polar_grid.add_row("此地太陽今日終日不出。")
+        polar_grid.add_row("整日均為黑夜，無傳統日出/日落的黃金與藍調時刻。")
+        polar_panel = Panel(polar_grid, border_style="bright_blue", width=108, title="🌑 極夜狀態 Polar Night")
+        
+        container = Panel(
+            polar_panel,
+            title=strip_vs16("[bold yellow]📸 黃金時刻與藍調時刻 Golden & Blue Hour[/bold yellow]"),
+            border_style="bright_blue",
+            box=ROUNDED,
+            width=112,
+            padding=(1, 2)
+        )
+        console.print(container)
+        return
+
+    # Morning Light Table
+    morning_table = Table.grid(padding=(0, 1), expand=True)
+    morning_table.add_column(style="dim", width=22, min_width=22, no_wrap=True)
+    morning_table.add_column(style="bold cyan", width=24, min_width=18)
+    morning_table.add_row("晨間藍調 Blue Hour   :", f"{format_time(s_times.get('blue_hour_am_start'))} - {format_time(s_times.get('blue_hour_am_end'))}")
+    morning_table.add_row("晨間黃金 Golden Hour :", f"{format_time(s_times.get('golden_hour_am_start'))} - {format_time(s_times.get('golden_hour_am_end'))}")
+    morning_table.add_row("日出時刻 Sunrise     :", f"🌅 {format_time(s_times.get('sunrise'))}")
+    
+    color_tag_am = "bold green" if stars_am >= 4 else ("yellow" if stars_am >= 3 else "grey53")
+    morning_table.add_row("晨間攝影推薦指數     :", f"[{color_tag_am}]{get_stars_str(stars_am)}[/{color_tag_am}]")
+    morning_table.add_row("天氣實況與指引       :", f"[dim]{desc_am}[/dim]")
+    
+    # Evening Light Table
+    evening_table = Table.grid(padding=(0, 1), expand=True)
+    evening_table.add_column(style="dim", width=22, min_width=22, no_wrap=True)
+    evening_table.add_column(style="bold orange1", width=24, min_width=18)
+    evening_table.add_row("日落時刻 Sunset      :", f"🌇 {format_time(s_times.get('sunset'))}")
+    evening_table.add_row("傍晚黃金 Golden Hour :", f"{format_time(s_times.get('golden_hour_pm_start'))} - {format_time(s_times.get('golden_hour_pm_end'))}")
+    evening_table.add_row("傍晚藍調 Blue Hour   :", f"{format_time(s_times.get('blue_hour_pm_start'))} - {format_time(s_times.get('blue_hour_pm_end'))}")
+    
+    color_tag_pm = "bold green" if stars_pm >= 4 else ("yellow" if stars_pm >= 3 else "grey53")
+    evening_table.add_row("傍晚攝影推薦指數     :", f"[{color_tag_pm}]{get_stars_str(stars_pm)}[/{color_tag_pm}]")
+    evening_table.add_row("天氣實況與指引       :", f"[dim]{desc_pm}[/dim]")
+    
+    # Responsive design based on terminal width
+    terminal_width = console.width
+    
+    # We need at least 112 cells to render side-by-side cleanly
+    if terminal_width < 112:
+        # Stack vertically
+        layout_grid = Table.grid(padding=(1, 0))
+        layout_grid.add_column(width=52)
+        
+        am_panel = Panel(morning_table, title="🌅 晨間光影 Morning Light", border_style="cyan", width=52)
+        pm_panel = Panel(evening_table, title="🌇 傍晚光影 Evening Light", border_style="orange1", width=52)
+        
+        layout_grid.add_row(am_panel)
+        layout_grid.add_row(pm_panel)
+        
+        container_width = 56
+    else:
+        # Render side-by-side
+        layout_grid = Table.grid(padding=(0, 4))
+        layout_grid.add_column(width=52)
+        layout_grid.add_column(width=52)
+        
+        am_panel = Panel(morning_table, title="🌅 晨間光影 Morning Light", border_style="cyan", width=52)
+        pm_panel = Panel(evening_table, title="🌇 傍晚光影 Evening Light", border_style="orange1", width=52)
+        
+        layout_grid.add_row(am_panel, pm_panel)
+        
+        container_width = 112
+        
+    container = Panel(
+        layout_grid,
+        title=strip_vs16("[bold yellow]📸 黃金時刻與藍調時刻 Golden & Blue Hour[/bold yellow]"),
+        border_style="bright_blue",
+        box=ROUNDED,
+        width=container_width,
+        padding=(1, 2)
+    )
+    console.print(container)

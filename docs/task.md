@@ -25,3 +25,25 @@
 - [x] Add unit tests in `tests/test_weather_enhancements.py` for mobile output formatting
 - [x] Update `README.md` and documentation
 - [x] Verify functionality via CLI tests
+
+## Golden & Blue Hour Feature Integration
+- [x] Create pure Python `src/jpweather/suncalc.py` solar astronomy calculation module
+- [x] Update `src/jpweather/api.py` to fetch hourly cloud cover and implement photography ratings
+- [x] Add formatting tables and cards in `src/jpweather/formatter.py` with `--mobile` support
+- [x] Implement CLI command `golden` and interactive wizard entry in `src/jpweather/cli.py`
+- [x] Create unit tests for sun calculations and CLI integration in `tests/test_suncalc.py` and `tests/test_golden.py`
+- [x] Document the feature in `docs/ideas/golden-hour.md` and `docs/specs/golden-hour-spec.md`
+
+## Golden & Blue Hour Code Review Fixes
+- [x] Define solar altitude constants to avoid magic numbers
+- [x] Standardize dictionary output keys for polar day/night
+- [x] Implement polar day/night status detection in `suncalc.py`
+- [x] Update CLI type hints to ensure compatibility with Python 3.9
+- [x] Create robust ISO datetime parser handling naive, aware, and trailing `Z` offsets
+- [x] Implement timezone fallback heuristic based on coordinates within Japan
+- [x] Integrate standard `logging` and replace silent request errors
+- [x] Extract photography rating thresholds into module constants
+- [x] Move geocoding sorting logic into a clean helper function
+- [x] Add polar day/night UI warning banners for desktop/mobile views
+- [x] Implement unit tests for polar status, ISO parser, and timezone fallback
+- [x] Verify CLI behavior and pass all 29 tests

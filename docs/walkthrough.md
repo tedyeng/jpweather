@@ -156,39 +156,102 @@ If you wish to refresh and purge the local cache:
 uv run jpweather clean
 ```
 
----
+### 5. Golden & Blue Hour (📸)
 
+This feature calculates the exact times for **Golden Hour** and **Blue Hour** (morning and evening) along with a photography recommendation index (1 to 5 stars) based on cloud cover and precipitation forecasts.
+
+- **Query Today's Golden Hour**:
+  ```bash
+  uv run jpweather golden "東京"
+  ```
+  *Output Example:*
+  ```text
+  📍 Tokyo Heliport, 千葉県, 日本
+  🌐 緯度: 35.6333  經度: 139.8500  時區: Asia/Tokyo
+  ╭──────────────── 📸 黃金時刻與藍調時刻 Golden & Blue Hour ────────────────╮
+  │                                                                          │
+  │  ╭── 🌅 晨間光影 Morning Light ──╮    ╭── 🌇 傍晚光影 Evening Light ──╮  │
+  │  │ 晨間藍調 Blue Hour… 03:58 -   │    │ 日落時刻 Sunset   … 🌇 18:55  │  │
+  │  │ :                   04:09     │    │ :                             │  │
+  │  │ 晨間黃金 Golden     04:09 -   │    │ 傍晚黃金 Golden     18:18 -   │  │
+  │  │ Hour :              05:05     │    │ Hour :              19:14     │  │
+  │  │ 日出時刻 Sunrise  … 🌅 04:27  │    │ 傍晚藍調 Blue Hour… 19:14 -   │  │
+  │  │ :                             │    │ :                   19:25     │  │
+  │  │ 晨間攝影推薦指數  … ★★★★★     │    │ 傍晚攝影推薦指數  … ★★★★★     │  │
+  │  │ :                             │    │ :                             │  │
+  │  │ 天氣實況與指引    … ⛅        │    │ 天氣實況與指引    … ⛅        │  │
+  │  │ :                   雲量適中… │    │ :                   雲量適中… │  │
+  │  ╰───────────────────────────────╯    ╰───────────────────────────────╯  │
+  │                                                                          │
+  ╰──────────────────────────────────────────────────────────────────────────╯
+  ```
+
+- **Query 7-Day Forecast**:
+  ```bash
+  uv run jpweather golden "京都" --week
+  ```
+  Generates a tabular forecast displaying transition slots and ratings for the entire week.
+
+- **Mobile View Integration**:
+  ```bash
+  uv run jpweather golden "富士山" --mobile
+  ```
+  Formats all light phases and recommendations vertically under 38 characters.
+
+- **Polar Region Support**:
+  In high-latitude areas experiencing polar days (midnight sun) or polar nights, the system automatically detects the status and prints localized warning panels:
+  ```text
+  ☀️ 極晝狀態 (Polar Day) / Midnight Sun
+  此地太陽今日終日不落。
+  整日均為白晝，可全天進行戶外拍攝，但無傳統日出/日落的黃金與藍調時刻。
+  ```
+
+---
 
 ## 🧪 Verification & Testing
 
-We created a robust unit test suite targeting critical utility functions, caching logic, edge-case geocoding behaviors, and API mock layers.
+We created a robust unit test suite targeting critical utility functions, caching logic, edge-case geocoding behaviors, API mock layers, solar calculations, DMS coordinates, and command integration.
 To run the test suite:
 ```bash
-uv run pytest
+.venv/bin/pytest
 ```
 
 *Results:*
 ```text
-============================== 12 passed in 0.53s ==============================
+============================== 29 passed in 0.49s ==============================
 ```
 All tests pass successfully!
 
 ### Test Suite Breakdown
 
-Our testing architecture consists of two primary test modules:
+Our testing architecture consists of four primary test modules:
 
 1. **`tests/test_jpweather.py` (6 Tests)**:
-   - **`test_is_cjk`**: Verifies accurate detection of CJK characters (e.g. Japanese kanji/Chinese characters).
-   - **`test_clean_query`**: Ensures input queries are stripped of trailing or leading spaces and tabs.
-   - **`test_get_weather_info`**: Validates the translation mapping from WMO weather codes to descriptive text, emojis, and terminal colors.
-   - **`test_get_wind_direction_arrow`**: Validates wind arrow mapping depending on wind direction angle in degrees.
-   - **`test_get_weekday_ch`**: Verifies Chinese weekday formatting (e.g., "週日", "週一").
-   - **`test_geocode`**: Tests geocoding by mocking HTTP API requests to Open-Meteo and verifying response structure parsing.
+   - **`test_is_cjk`**: Verifies accurate detection of CJK characters.
+   - **`test_clean_query`**: Ensures input queries are stripped of trailing or leading spaces.
+   - **`test_get_weather_info`**: Validates the translation mapping from WMO weather codes.
+   - **`test_get_wind_direction_arrow`**: Validates wind arrow mapping depending on wind direction angle.
+   - **`test_get_weekday_ch`**: Verifies Chinese weekday formatting.
+   - **`test_geocode`**: Tests geocoding by mocking HTTP API requests to Open-Meteo.
 
-2. **`tests/test_weather_enhancements.py` (6 Tests)**:
-   - **`test_get_weather_returns_none_on_http_error`**: Verifies that network timeouts or HTTP failures gracefully return `None` rather than raising uncaught exceptions.
-   - **`test_fetch_weather_with_cache_handles_failure`**: Verifies that failed API calls propagate `None` cleanly and do not populate the SQLite cache with corrupt/failed entries.
-   - **`test_geocode_suffixes_for_three_char_query`**: Verifies the smart CJK matching behavior by ensuring that 3-character CJK location names (such as "大阪府") generate suffix variation queries identically to 2-character names.
-   - **`test_parse_gps`**: Validates decimal and DMS (Degrees, Minutes, Seconds) CJK/English GPS coordinate parsing across multiple string formats and boundaries.
-   - **`test_reverse_geocode_success`**: Mocks the Nominatim reverse geocoding API to verify accurate CJK prefecture extraction and structured dictionary conversion.
-   - **`test_reverse_geocode_failure`**: Verifies graceful fallback to coordinates-labeled placeholders in the event of reverse-geocoding network failures.
+2. **`tests/test_weather_enhancements.py` (9 Tests)**:
+   - **`test_get_weather_returns_none_on_http_error`**: Verifies that network timeouts or HTTP failures gracefully return `None`.
+   - **`test_fetch_weather_with_cache_handles_failure`**: Verifies that failed API calls propagate `None` cleanly and do not populate the SQLite cache.
+   - **`test_geocode_suffixes_for_three_char_query`**: Verifies the CJK matching suffix generation.
+   - **`test_parse_gps`**: Validates decimal and DMS GPS coordinate parsing.
+   - **`test_reverse_geocode_success`**: Mocks the Nominatim reverse geocoding API.
+   - **`test_reverse_geocode_failure`**: Verifies graceful fallback to coordinates-labeled placeholders.
+   - **`test_cli_current_mobile` / `test_cli_forecast_mobile` / `test_cli_current_cancel`**: Tests CLI mobile formats and cancellations.
+
+3. **`tests/test_suncalc.py` (5 Tests)**:
+   - **`test_julian_conversions`**: Validates datetime-to-Julian calculations.
+   - **`test_tokyo_solstice_sun_times`**: Checks solar math accuracy against Tokyo summer solstice.
+   - **`test_london_equinox_sun_times`**: Checks solar math accuracy against London equinox.
+   - **`test_solar_phases_order`**: Verifies chronological ordering constraints.
+   - **`test_polar_status_detection`**: Validates polar status detection for high-latitude locations (Tromsø solstices/equinox).
+
+4. **`tests/test_golden.py` (9 Tests)**:
+   - **`test_calculate_photography_rating_rain` / `overcast` / `perfect_clouds` / `clear`**: Tests cloud and rain thresholds for rating stars.
+   - **`test_cli_golden_today` / `week_and_mobile` / `cancel`**: Tests the `golden` CLI subcommand execution and arguments.
+   - **`test_parse_iso_datetime`**: Validates ISO datetime parsing for naive, offset, and trailing `Z` values.
+   - **`test_reverse_geocode_timezone_fallback`**: Verifies coordinates-based fallback timezone heuristics (Tokyo vs Tromsø).

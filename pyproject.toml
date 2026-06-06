@@ -1,6 +1,6 @@
 [project]
 name = "japan-weather"
-version = "0.1.0"
+version = "0.2.1"
 description = "A gorgeous CLI tool for querying current weather and 1-week forecasts in Japan, optimized with local caching and JMA metadata"
 readme = "README.md"
 requires-python = ">=3.10"
